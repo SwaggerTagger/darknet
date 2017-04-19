@@ -580,8 +580,12 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
     }
 }
 
-void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
+void test_detector(char *datacfg, char *cfgfile, char *weightfile, 
+                   char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int machine_readable)
 {
+    if (machine_readable) {
+        fclose(stdout);
+    }
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
     char **names = get_labels(name_list);
@@ -627,21 +631,49 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         get_region_boxes(l, im.w, im.h, net.w, net.h, thresh, probs, boxes, 0, 0, hier_thresh, 1);
         if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
         //else if (nms) do_nms_sort(boxes, probs, l.w*l.h*l.n, l.classes, nms);
-        draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);
-        if(outfile){
-            save_image(im, outfile);
-        }
-        else{
-            save_image(im, "predictions");
-#ifdef OPENCV
-            cvNamedWindow("predictions", CV_WINDOW_NORMAL); 
-            if(fullscreen){
-                cvSetWindowProperty("predictions", CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+        if (machine_readable) {
+            stdout = fopen("/dev/tty", "w");
+            int matchc = 0;
+            printf("{\"input\": \"%s\", \"time\": %f, \"matches\": [ \n", input, sec(clock()-time));
+            for (int i = 0; i < (l.w*l.h*l.n); i++ ) {
+                int class = max_index(probs[i], l.classes);
+                float prob = probs[i][class];
+                if (prob > thresh) {
+                    if (matchc > 0) {
+                        printf(", "); 
+                    }
+
+                    matchc++;
+
+                    box b = boxes[i];
+                    int left  = (b.x-b.w/2.)*im.w;
+                    int right = (b.x+b.w/2.)*im.w;
+                    int top   = (b.y-b.h/2.)*im.h;
+                    int bot   = (b.y+b.h/2.)*im.h;
+                    printf("{\"class\": \"%s\", \"probability\": %f, \"left\": %d, \"right\": %d, \"top\": %d, \"bottom\": %d }\n", 
+                        names[class], prob, left, right, top, bot);
+                }
             }
-            show_image(im, "predictions");
-            cvWaitKey(0);
-            cvDestroyAllWindows();
+            printf("], \"count\": %d }\n", matchc);
+            fclose(stdout);
+        } else {
+            draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);
+            if(outfile){
+                save_image(im, outfile);
+            }
+            else{
+                save_image(im, "predictions");
+#ifdef OPENCV
+                cvNamedWindow("predictions", CV_WINDOW_NORMAL); 
+                if(fullscreen){
+                    cvSetWindowProperty("predictions", CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+                }
+                show_image(im, "predictions");
+                cvWaitKey(0);
+                cvDestroyAllWindows();
 #endif
+            }
+
         }
 
         free_image(im);
@@ -689,6 +721,7 @@ void run_detector(int argc, char **argv)
 
     int clear = find_arg(argc, argv, "-clear");
     int fullscreen = find_arg(argc, argv, "-fullscreen");
+    int machine_readable = find_arg(argc, argv, "-tagger-output");
     int width = find_int_arg(argc, argv, "-w", 0);
     int height = find_int_arg(argc, argv, "-h", 0);
     int fps = find_int_arg(argc, argv, "-fps", 0);
@@ -697,7 +730,7 @@ void run_detector(int argc, char **argv)
     char *cfg = argv[4];
     char *weights = (argc > 5) ? argv[5] : 0;
     char *filename = (argc > 6) ? argv[6]: 0;
-    if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
+    if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen, machine_readable);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
     else if(0==strcmp(argv[2], "valid2")) validate_detector_flip(datacfg, cfg, weights, outfile);
