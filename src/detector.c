@@ -584,7 +584,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile,
                    char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int machine_readable)
 {
     if (machine_readable) {
-        fclose(stdout);
+        //fclose(stdout);
     }
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
@@ -627,12 +627,12 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile,
         float *X = sized.data;
         time=clock();
         network_predict(net, X);
-        printf("%s: Predicted in %f seconds.\n", input, sec(clock()-time));
+        if (!machine_readable) printf("%s: Predicted in %f seconds.\n", input, sec(clock()-time));
         get_region_boxes(l, im.w, im.h, net.w, net.h, thresh, probs, boxes, 0, 0, hier_thresh, 1);
         if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
         //else if (nms) do_nms_sort(boxes, probs, l.w*l.h*l.n, l.classes, nms);
         if (machine_readable) {
-            stdout = fopen("/dev/tty", "w");
+            //stdout = fopen("/dev/tty", "w");
             int matchc = 0;
             printf("{\"input\": \"%s\", \"time\": %f, \"matches\": [ \n", input, sec(clock()-time));
             for (int i = 0; i < (l.w*l.h*l.n); i++ ) {
@@ -655,7 +655,6 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile,
                 }
             }
             printf("], \"count\": %d }\n", matchc);
-            fclose(stdout);
         } else {
             draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);
             if(outfile){
